@@ -1,28 +1,47 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
+cmake_minimum_required(VERSION 3.1)
+project(talos_data)
 
-# Project properties
-SET(PROJECT_ORG stack-of-tasks)
-SET(PROJECT_NAME talos_data)
-SET(PROJECT_DESCRIPTION "Talos urdf model, srdf model and other data")
-SET(PROJECT_URL "https://github.com/${PROJECT_ORG}/${PROJECT_NAME}")
+option(DISABLE_ROS OFF)
+find_package(catkin QUIET)
 
-# Project configuration
-SET(PROJECT_USE_CMAKE_EXPORT TRUE)
+if(DISABLE_ROS)
+  message(STATUS "Building without ROS support as DISABLE_ROS=ON")
+endif()
 
-# JRL-cmakemodule setup
-INCLUDE(cmake/base.cmake)
+if(NOT DISABLE_ROS AND ${catkin_FOUND}) # build with catkin
+  catkin_package(SKIP_PKG_CONFIG_GENERATION)
 
-# Project definition
-COMPUTE_PROJECT_ARGS(PROJECT_ARGS LANGUAGES CXX C)
-PROJECT(${PROJECT_NAME} ${PROJECT_ARGS})
+  # Configure the develspace pkg-config file
+  set(DATADIR "${PROJECT_SOURCE_DIR}")
+  configure_file(
+    "${PROJECT_SOURCE_DIR}/pkgconfig.pc.cmake"
+    "${CATKIN_DEVEL_PREFIX}/lib/pkgconfig/${PROJECT_NAME}.pc")
+else() # catkin-free build
+  include(CMakePackageConfigHelpers)
+  set(VERSION_CONFIG "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake")
+  set(PROJECT_CONFIG "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake")
+  set(CONFIG_INSTALL_DIR "lib/cmake/${PROJECT_NAME}")
+  write_basic_package_version_file(
+    ${VERSION_CONFIG}
+    VERSION 1.0.0
+    COMPATIBILITY SameMajorVersion
+  )
+  configure_package_config_file(cmake/Config.cmake.in "${PROJECT_CONFIG}" INSTALL_DESTINATION "${CONFIG_INSTALL_DIR}")
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake" "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake" DESTINATION "${CONFIG_INSTALL_DIR}")
+  set(CATKIN_PACKAGE_SHARE_DESTINATION share/${PROJECT_NAME})
+endif()
 
-# Main Library
-ADD_LIBRARY(${PROJECT_NAME} INTERFACE)
-INSTALL(TARGETS ${PROJECT_NAME} EXPORT ${TARGETS_EXPORT_NAME} DESTINATION lib)
+# Configure the installspace pkg-config file
+set(DATADIR "${CMAKE_INSTALL_PREFIX}/${CATKIN_PACKAGE_SHARE_DESTINATION}")
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/catkin_generated/installspace)
+configure_file(
+  "${PROJECT_SOURCE_DIR}/pkgconfig.pc.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/catkin_generated/installspace/${PROJECT_NAME}.pc")
+install(
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/catkin_generated/installspace/${PROJECT_NAME}.pc
+  DESTINATION lib/pkgconfig)
 
-FOREACH(dir config gazebo meshes robots urdf srdf launch)
-  INSTALL(DIRECTORY ${dir} DESTINATION share/${PROJECT_NAME})
-ENDFOREACH(dir)
-
-INSTALL(FILES package.xml DESTINATION share/${PROJECT_NAME})
-SET(PACKAGE_EXTRA_MACROS "set(TALOS_DATA_PREFIX ${CMAKE_INSTALL_PREFIX})")
+foreach(dir convex launch meshes rsdf urdf)
+   install(DIRECTORY ${dir}/
+      DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/${dir})
+endforeach(dir)
